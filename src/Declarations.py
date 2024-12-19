@@ -6,6 +6,8 @@ import requests
 
 ## I-2 Modules pour l'analyse de données et manipulations
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 
 
@@ -16,9 +18,9 @@ import pandas as pd
 
 # II- Déclarations de fonctions
 
-## II-1- Fonctions pour extraire les noms des pays du monde
+## II-1- Fonctions pour extraire les codes ISO alpha-3 des pays du monde
 
-def get_worldbank_country_codes():
+def get_worldbank_country_codes(url):
     """
     Récupère les codes ISO alpha-3 des pays dans la base de données de la Banque mondiale,
     en excluant les régions et unions économiques.
@@ -26,7 +28,6 @@ def get_worldbank_country_codes():
     Returns:
         list: Chaine de caractère des codes ISO alpha-3 des pays uniquement.
     """
-    url = "http://api.worldbank.org/v2/country?format=json&per_page=300"
     response = requests.get(url)
     
     if response.status_code != 200:
@@ -56,46 +57,178 @@ def get_worldbank_country_codes():
 
 
 
-## II-2- Fonctions pour importer les données des pays
+## II-2- Fonctions pour importer les données des pays pour un indicateur donné
 
-def fetch_worldbank_data(countries, indicator):
+
+def fetch_worldbank_data(countries, indicator, start_year, end_year):
     """
-    Télécharge les données de la Banque mondiale avec l'API pour un indicateur et une liste de pays.
+    Télécharge les données de l'API de la Banque mondiale pour un indicateur.
     
     Args:
-        countries (str): Liste de codes ISO des pays séparés par ';' (ex: 'USA;FRA;DEU').
-        indicator (dict): Indicateur recherché.
-        
-    Returns:
-        pd.DataFrame: Base de données avec l'indicateur et les codes ISO des pays.
-    """
-
-    # URL de l'API World Bank avec les codes de pays et l'indicateur
-    url = f"http://api.worldbank.org/v2/country/{countries}/indicator/{indicator}?format=json"
-    response = requests.get(url)
+        countries (str): Liste de codes ISO alpha-3 des pays séparés par ';' (ex: 'USA;FRA;DEU').
+        indicator (str): Code de l'indicateur (ex: 'NY.GDP.MKTP.KD').
+        start_year (int): Année de début pour la plage de données.
+        end_year (int): Année de fin pour la plage de données.
     
+    Returns:
+        pd.DataFrame: Base de données contenant les pays, les codes ISO alpha-3 des pays,
+                      le nom de l'indicateur, l'année et la valeur de l'indicateur.
+    """
+    # Dictionnaire des indicateurs
+    indicators = {
+        'NY.GDP.MKTP.KD': 'GDP (constant 2015 US$)',
+        'NE.GDI.FTOT.KD': 'Gross Fixed Capital Formation (constant 2015 US$)',
+        'SP.POP.1564.TO': 'Population ages 15-64, total',
+        'NE.GDI.FTOT.ZS': 'Gross Fixed Capital Formation (% GDP)'
+    }
+    
+    # URL pour télécharger les données
+    url = f"http://api.worldbank.org/v2/country/{countries}/indicator/{indicator}?date={start_year}:{end_year}&format=json&per_page=12000"
+    response = requests.get(url)
+
+    # Vérifier si la requête a réussi
     if response.status_code != 200:
         raise Exception(f"Erreur lors de la requête API : {response.status_code}")
     
     data = response.json()
+    
+    # Vérifier si des données sont disponibles
     if len(data) < 2 or not data[1]:
-        print(f"Aucune donnée disponible pour {indicator}")
+        print(f"Aucune donnée disponible pour l'indicateur {indicator} et les pays {countries}")
+        return pd.DataFrame()  # Retourner un DataFrame vide
     else:
         print("Téléchargement de données réussi")
     
     # Extraire et normaliser les données
     records = data[1]
-    df = pd.json_normalize(records)  # Aplatir les données imbriquées
+    df = pd.json_normalize(records)
 
-    # Vérifier si les données contiennent des informations sur les pays et extraire les codes ISO
-    if 'country.id' in df.columns:
-        df['Country_Code'] = df['country.id']  # Ajouter la colonne avec les codes ISO des pays
-    
-    # Sélectionner les colonnes pertinentes et les renommer
-    df = df[['country.value', 'Country_Code', 'date', 'value']].rename(columns={
+    # Récupérer le nom de l'indicateur
+    indicator_name = indicators.get(indicator, indicator)  # Utiliser le nom ou le code si non trouvé
+
+    # Garder les colonnes pertinentes et les renommer
+    df = df[['country.value', 'countryiso3code', 'date', 'value']].rename(columns={
         'country.value': 'Country',
+        'countryiso3code': 'Country_Code',
         'date': 'Year',
-        'value': indicator  # Utilise le nom de l'indicateur comme colonne
+        'value': indicator_name  # Nom de l'indicateur dans la colonne
     })
+
+    # Vérifier que les codes pays sont au format ISO alpha-3 (facultatif)
+    df = df[df['Country_Code'].str.len() == 3]
     
     return df
+
+
+
+# II-3- Fonction pour afficher le pourcentage de valeurs manquantes pour chaque pays
+def calculate_missing_percentage(df, column_name):
+    """
+    Calcule le pourcentage de valeurs manquantes pour chaque pays dans une colonne spécifiée.
+    
+    Args:
+        df (pd.DataFrame): DataFrame contenant les données.
+        column_name (str): Le nom de la colonne dont le pourcentage de valeurs manquantes doit être calculé.
+    
+    Returns:
+        pd.DataFrame: DataFrame contenant les pays et leur pourcentage de valeurs manquantes pour la colonne spécifiée.
+    """
+    # Calculer le nombre total d'années de données disponibles
+    total_years = df['Year'].nunique()
+
+    # Calculer le pourcentage de valeurs manquantes par pays
+    missing_percentage_by_country = df.groupby('Country')[column_name].apply(
+        lambda x: x.isnull().sum() / total_years * 100)
+    
+    return missing_percentage_by_country
+
+
+
+# II-4 Fonction pour supprimer les pays avec plus de 20% de valeurs manquantes
+def remove_countries_with_missing_values(df, column_name, threshold=20):
+    """
+    Supprime les pays dont les valeurs manquantes dans une colonne spécifiée dépassent un certain seuil (20% par défaut).
+    
+    Args:
+        df (pd.DataFrame): DataFrame contenant les données.
+        column_name (str): Le nom de la colonne sur laquelle le seuil de valeurs manquantes est appliqué.
+        threshold (float): Seuil de pourcentage de valeurs manquantes (par défaut 0.2 pour 20%).
+    
+    Returns:
+        pd.DataFrame: DataFrame avec les pays dont le pourcentage de valeurs manquantes est inférieur au seuil.
+    """
+    # Calculer le pourcentage de valeurs manquantes par pays
+    missing_percentage_by_country = calculate_missing_percentage(df, column_name)
+    
+    # Filtrer les pays dont les valeurs manquantes sont inférieures au seuil (en pourcentage)
+    valid_countries = missing_percentage_by_country[missing_percentage_by_country <= threshold].index
+    invalid_countries = missing_percentage_by_country[missing_percentage_by_country > threshold].index
+    
+    # Afficher les pays supprimés
+    print(f"Pays supprimés (avec plus de {threshold}% de valeurs manquantes):")
+    print(list(invalid_countries))  # Afficher la liste des pays supprimés
+    
+    # Filtrer le DataFrame pour ne garder que les pays valides
+    filtered_df = df[df['Country'].isin(valid_countries)]
+    
+    return filtered_df
+
+
+
+# II-5- Visualiser les valeurs manquantes 
+
+def visualize_missing_values(df, column_name):
+    """
+    Visualise les valeurs manquantes pour chaque pays pour une colonne spécifiée.
+    
+    Args:
+        df (pd.DataFrame): DataFrame contenant les données.
+        column_name (str): Le nom de la colonne dont les valeurs manquantes sont visualisées.
+    """
+
+    # Pivot le DataFrame pour avoir 'Country' en colonnes et 'Year' en lignes
+    df_pivot = df.pivot_table(index='Year', columns='Country', values=column_name)
+    
+    # Créer un masque où les valeurs manquantes sont marquées par True
+    missing_data = df_pivot.isnull()
+    
+    # Tracer la heatmap
+    plt.figure(figsize=(12, 8))
+    sns.heatmap(missing_data, cmap='Blues', cbar=False, linewidths=0.5, linecolor='gray')
+    
+    # Ajouter des titres et des étiquettes
+    plt.title(f"Visualisation des valeurs manquantes pour {column_name}", fontsize=14)
+    plt.xlabel('Pays', fontsize=12)
+    plt.ylabel('Année', fontsize=12)
+    
+    plt.show()
+
+
+
+
+
+# II-6- Imputer les valeurs manquantes par la médiane
+def impute_missing_values_by_median(df, column_name):
+    """
+    Impute les valeurs manquantes pour chaque pays dans la colonne spécifiée par la médiane.
+    
+    Args:
+        df (pd.DataFrame): DataFrame contenant les données avec 'Country', 'Year', et la colonne cible.
+        column_name (str): Le nom de la colonne pour laquelle l'imputation par la médiane doit être effectuée.
+    
+    Returns:
+        pd.DataFrame: DataFrame avec les valeurs manquantes imputées.
+    """
+    # Appliquer l'imputation de la médiane par pays
+    def impute_country(country_df):
+        median_value = country_df[column_name].median()  # Calcul de la médiane pour la colonne spécifiée
+        country_df[column_name] = country_df[column_name].fillna(median_value)  # Remplacer les valeurs manquantes
+        return country_df
+
+    # Grouper par pays et appliquer l'imputation
+    df_imputed = df.groupby('Country').apply(impute_country)
+    
+    # Réinitialiser l'index pour aplatir le DataFrame
+    df_imputed = df_imputed.reset_index(drop=True)
+
+    return df_imputed
