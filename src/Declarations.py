@@ -8,8 +8,24 @@ import requests
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import os
+import zipfile
 
 
+## I-3 Modules pour la visualisation des données
+import geopandas as gpd
+import dash
+from dash import dcc, html, dash_table
+from dash.dependencies import Input, Output
+import plotly.express as px
+
+## I-4. Imports liés à la modélisation et à la statistique
+import statsmodels.api as sm
+import statsmodels.tsa.filters.hp_filter as smf
+import statsmodels.tsa.ardl as sma
+from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
+from statsmodels.tsa.seasonal import seasonal_decompose
+from statsmodels.tsa.stattools import adfuller
 
 # II- Déclarations de fonctions
 
@@ -227,3 +243,60 @@ def impute_missing_values_by_median(df, column_name):
     df_imputed = df_imputed.reset_index(drop=True)
 
     return df_imputed
+
+
+
+
+# II-7- Analyse des séries temporelles
+def analyse_serie_temporelle(data, indicateur, pays):
+    df = data.copy()
+    # Utilisation de la fonction pivot pour remodeler le dataframe
+    df = df.pivot(index=['Year'], columns='Country_Code', values=indicateur)
+    df['Year'] = pd.to_datetime(df.index)
+
+    # Sélectionner la série temporelle du pays spécifique
+    serie_temporelle = df[pays].dropna()
+
+    # Moyenne mobile d'ordre 4
+    rolling_mean = serie_temporelle.rolling(window=4).mean()
+
+    # Visualisation de la série temporelle et de la moyenne mobile dans le même plot
+    plt.figure(figsize=(10, 6))
+    plt.plot(serie_temporelle, label=f'Série Temporelle - {indicateur} en {pays}', color='blue')
+    plt.plot(rolling_mean, label='Moyenne Mobile', color='red')
+    plt.title(f'Série Temporelle et Moyenne Mobile - {indicateur} en {pays}')
+    plt.legend()
+    plt.show()
+
+    # Décomposition saisonnière
+    decomposition = seasonal_decompose(serie_temporelle, model='multiplicative', period=4)
+
+    # Visualisation des composants décomposés
+    plt.figure(figsize=(12, 8))
+
+    # Série Temporelle
+    plt.subplot(4, 1, 1)
+    plt.plot(serie_temporelle)
+    plt.title(f'Série Temporelle - {indicateur} en {pays}')
+
+    # Tendance
+    plt.subplot(4, 1, 2)
+    plt.plot(decomposition.trend)
+    plt.title('Tendance')
+
+    # Saisonnalité
+    plt.subplot(4, 1, 3)
+    plt.plot(decomposition.seasonal)
+    plt.title('Saisonnalité')
+
+    # Résidus
+    plt.subplot(4, 1, 4)
+    plt.plot(decomposition.resid)
+    plt.title('Résidus')
+
+    plt.tight_layout()
+    plt.show()
+
+    # Test de stationnarité (Augmented Dickey-Fuller)
+    result = adfuller(serie_temporelle)
+    print(f'Test de Dickey-Fuller Augmenté:\nStatistique de test = {result[0]}\nValeur critique (5%) = {result[4]["5%"]}')
