@@ -11,11 +11,6 @@ import seaborn as sns
 
 
 
-
-
-
-
-
 # II- Déclarations de fonctions
 
 ## II-1- Fonctions pour extraire les codes ISO alpha-3 des pays du monde
