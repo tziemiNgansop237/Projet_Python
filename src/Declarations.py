@@ -2,6 +2,7 @@
 
 ## I-1 Modules pour l'importation des données api
 import requests
+import openpyxl
 
 
 ## I-2 Modules pour l'analyse de données et manipulations
@@ -246,7 +247,6 @@ def impute_missing_values_by_median(df, column_name):
 
 
 
-
 # II-7- Analyse des séries temporelles
 def analyse_serie_temporelle(data, indicateur, pays):
     df = data.copy()
@@ -257,8 +257,8 @@ def analyse_serie_temporelle(data, indicateur, pays):
     # Sélectionner la série temporelle du pays spécifique
     serie_temporelle = df[pays].dropna()
 
-    # Moyenne mobile d'ordre 4
-    rolling_mean = serie_temporelle.rolling(window=4).mean()
+    # Moyenne mobile d'ordre 6
+    rolling_mean = serie_temporelle.rolling(window=6).mean()
 
     # Visualisation de la série temporelle et de la moyenne mobile dans le même plot
     plt.figure(figsize=(10, 6))
@@ -269,7 +269,7 @@ def analyse_serie_temporelle(data, indicateur, pays):
     plt.show()
 
     # Décomposition saisonnière
-    decomposition = seasonal_decompose(serie_temporelle, model='multiplicative', period=4)
+    decomposition = seasonal_decompose(serie_temporelle, model='multiplicative', period=6)
 
     # Visualisation des composants décomposés
     plt.figure(figsize=(12, 8))
@@ -300,3 +300,81 @@ def analyse_serie_temporelle(data, indicateur, pays):
     # Test de stationnarité (Augmented Dickey-Fuller)
     result = adfuller(serie_temporelle)
     print(f'Test de Dickey-Fuller Augmenté:\nStatistique de test = {result[0]}\nValeur critique (5%) = {result[4]["5%"]}')
+
+
+
+
+## II-8- Calcul du taux de croissance moyen par pays
+
+def calculer_taux_croissance_moyen_par_pays(df, year_col, country_col, population_col):
+    """
+    Calcule le taux de croissance démographique moyen (n) pour chaque pays entre 1990 et 2023.
+    Args:
+        df (pd.DataFrame): Le DataFrame contenant les données.
+        year_col (str): Nom de la colonne représentant les années.
+        country_col (str): Nom de la colonne représentant les pays.
+        population_col (str): Nom de la colonne représentant la population en âge de travailler.
+    Returns:
+        pd.DataFrame: Un nouveau DataFrame avec le pays et son taux de croissance moyen (n).
+    """
+    # Trier les données par pays et année
+    df = df.sort_values(by=[country_col, year_col]).copy()
+    
+    # Calculer la population décalée (année précédente) pour chaque pays
+    df['Population_lag'] = df.groupby(country_col)[population_col].shift(1)
+    
+    # Calculer le taux de croissance démographique pour chaque année
+    df['Taux_croissance_annuel'] = (df[population_col] - df['Population_lag']) / df['Population_lag']
+    
+    # Supprimer les lignes où le taux ne peut pas être calculé (première année pour chaque pays)
+    df = df.dropna(subset=['Taux_croissance_annuel']).copy()
+    
+    # Calculer le taux de croissance moyen par pays
+    taux_croissance_moyen = df.groupby(country_col)['Taux_croissance_annuel'].mean().reset_index()
+    taux_croissance_moyen.rename(columns={'Taux_croissance_annuel': 'Taux_croissance_moyen'}, inplace=True)
+    
+    return taux_croissance_moyen
+
+
+## II-9- Calcul du taux d'épargne moyen par pays 
+def calculer_taux_epargne_moyen_par_pays(df, year_col, country_col, capital_travailleur, pib_travailleur):
+    """
+    Calcule le taux d'épargne moyen (s) pour chaque pays entre 1990 et 2023.
+    Args:
+        df (pd.DataFrame): Le DataFrame contenant les données.
+        year_col (str): Nom de la colonne représentant les années.
+        country_col (str): Nom de la colonne représentant les pays.
+        gfcf_col (str): Nom de la colonne représentant la formation brute de capital fixe (GFCF).
+        pib_col (str): Nom de la colonne représentant le PIB total.
+    Returns:
+        pd.DataFrame: Un nouveau DataFrame avec le pays et son taux d'épargne moyen (s).
+    """
+    # Calculer le taux d'épargne pour chaque ligne
+    df['Taux_epargne'] = df[capital_travailleur] / df[pib_travailleur]
+    
+    # Calculer la moyenne du taux d'épargne par pays
+    taux_epargne_moyen = df.groupby(country_col)['Taux_epargne'].mean().reset_index()
+    taux_epargne_moyen.rename(columns={'Taux_epargne': 'Taux_epargne_moyen'}, inplace=True)
+    
+    return taux_epargne_moyen
+
+
+## II-10 Former échantillons des organisations économiques OCDE, UA
+def former_echantillons(df, country_col, liste_ocde, liste_ua):
+    """
+    Sépare le jeu de données en deux échantillons : un pour les pays de l'OCDE et un pour les pays de l'Union Africaine.
+    Args:
+        df (pd.DataFrame): Le DataFrame contenant les données.
+        country_col (str): Nom de la colonne représentant les pays.
+        liste_ocde (list): Liste des pays appartenant à l'OCDE (codes ISO ou noms).
+        liste_ua (list): Liste des pays appartenant à l'Union Africaine (codes ISO ou noms).
+    Returns:
+        tuple: Deux DataFrames, l'un pour les pays de l'OCDE et l'autre pour les pays de l'UA.
+    """
+    # Filtrer les données pour les pays de l'OCDE
+    df_ocde = df[df[country_col].isin(liste_ocde)].copy()
+    
+    # Filtrer les données pour les pays de l'Union Africaine
+    df_ua = df[df[country_col].isin(liste_ua)].copy()
+    
+    return df_ocde, df_ua
