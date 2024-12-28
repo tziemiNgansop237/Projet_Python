@@ -359,7 +359,7 @@ def calculer_taux_epargne_moyen_par_pays(df, year_col, country_col, capital_trav
     return taux_epargne_moyen
 
 
-## II-10 Former échantillons des organisations économiques OCDE, UA
+## II-10  Former échantillons des organisations économiques OCDE, UA
 def former_echantillons(df, country_col, liste_ocde, liste_ua):
     """
     Sépare le jeu de données en deux échantillons : un pour les pays de l'OCDE et un pour les pays de l'Union Africaine.
