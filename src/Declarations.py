@@ -16,7 +16,7 @@ import zipfile
 ## I-3 Modules pour la visualisation des données
 import geopandas as gpd
 import dash
-from dash import dcc, html, dash_table
+from dash import dcc, html, dash_table, Dash
 from dash.dependencies import Input, Output
 import plotly.express as px
 
@@ -269,7 +269,7 @@ def analyse_serie_temporelle(data, indicateur, pays):
     plt.show()
 
     # Décomposition saisonnière
-    decomposition = seasonal_decompose(serie_temporelle, model='multiplicative', period=6)
+    decomposition = seasonal_decompose(serie_temporelle, model='multiplicative', period=4)
 
     # Visualisation des composants décomposés
     plt.figure(figsize=(12, 8))
