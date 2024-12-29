@@ -10,7 +10,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os
-import zipfile
+import numpy as np
 
 
 ## I-3 Modules pour la visualisation des données
@@ -27,6 +27,28 @@ import statsmodels.tsa.ardl as sma
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from statsmodels.tsa.seasonal import seasonal_decompose
 from statsmodels.tsa.stattools import adfuller
+
+## I-5. Imprts liés au clusteriing 
+
+import plotly.graph_objects as go 
+import plotly.graph_objs as go
+from pywaffle import Waffle
+from sklearn.base import clone
+from sklearn.pipeline import Pipeline
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import silhouette_score
+from sklearn.decomposition import PCA
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from time import time
+from yellowbrick.cluster import KElbowVisualizer
+from yellowbrick.cluster import silhouette_visualizer
+import operator
+from sklearn import manifold
+import plotly.express as px
+from sklearn.mixture import GaussianMixture
+
 
 # II- Déclarations de fonctions
 
@@ -324,9 +346,6 @@ def calculer_taux_croissance_moyen(df, year_col, country_col, population_col):
     # Trier les données par pays et année
     df = df.sort_values(by=[country_col, year_col]).copy()
     
-    # Filtrer les données pour ne conserver que les années 1990 à 2023
-    df = df[(df[year_col] == 1990) | (df[year_col] == 2023)]
-    
     # Calculer le taux moyen de croissance par pays
     taux_croissance_moyen = df.groupby(country_col).apply(
         lambda group: (group[population_col].iloc[-1] / group[population_col].iloc[0]) ** (1 / (2023 - 1990)) - 1
@@ -337,7 +356,7 @@ def calculer_taux_croissance_moyen(df, year_col, country_col, population_col):
 
 
 ## II-9- Calcul du taux d'épargne moyen par pays 
-def calculer_taux_epargne_moyen_par_pays(df, year_col, country_col, capital_travailleur, pib_travailleur):
+def calculer_taux_epargne_moyen(df, year_col, country_col, capital_travailleur, pib_travailleur):
     """
     Calcule le taux d'épargne moyen (s) pour chaque pays entre 1990 et 2023.
     Args:
@@ -360,7 +379,7 @@ def calculer_taux_epargne_moyen_par_pays(df, year_col, country_col, capital_trav
 
 
 ## II-10 Former échantillons des organisations économiques OCDE, UA
-def former_echantillons(df, country_col, liste_ocde, liste_ua):
+def former_echantillons(df, country_col, liste1, liste2):
     """
     Sépare le jeu de données en deux échantillons : un pour les pays de l'OCDE et un pour les pays de l'Union Africaine.
     Args:
@@ -372,9 +391,212 @@ def former_echantillons(df, country_col, liste_ocde, liste_ua):
         tuple: Deux DataFrames, l'un pour les pays de l'OCDE et l'autre pour les pays de l'UA.
     """
     # Filtrer les données pour les pays de l'OCDE
-    df_ocde = df[df[country_col].isin(liste_ocde)].copy()
+    df1 = df[df[country_col].isin(liste1)].copy()
     
     # Filtrer les données pour les pays de l'Union Africaine
-    df_ua = df[df[country_col].isin(liste_ua)].copy()
+    df2 = df[df[country_col].isin(liste2)].copy()
     
-    return df_ocde, df_ua
+    return df1, df2
+
+
+## II-11 Regression
+
+def perform_regression(data, dependent_var, independent_vars):
+    """
+    Effectue une régression linéaire OLS sur les données spécifiées.
+
+    Arguments :
+    - data : DataFrame contenant les données
+    - dependent_var : Nom de la colonne pour la variable dépendante (y)
+    - independent_vars : Liste des noms des colonnes pour les variables indépendantes (X)
+
+    Retourne :
+    - Un résumé du modèle de régression
+    """
+    # Extraire la variable dépendante (y) et les variables indépendantes (X)
+    y = data[[dependent_var]]
+    X = data[independent_vars]
+
+    # Ajouter une constante pour inclure l'intercept dans le modèle
+    X = sm.add_constant(X)
+
+    # Effectuer la régression linéaire
+    model = sm.OLS(y, X).fit()
+
+    # Afficher le résumé des résultats
+    return model.summary()
+
+## II-12 Matrice de variance covariances
+
+def plot_correlation_matrix(data):
+    """
+    Génère une heatmap des corrélations pour les variables spécifiées.
+    
+    Arguments :
+    - data : DataFrame contenant les données
+    - pib_col : Nom de la colonne pour le PIB par tête
+    - epargne_col : Nom de la colonne pour le taux d'épargne
+    - croissance_col : Nom de la colonne pour le taux de croissance
+    - g_sigma : Constante ajoutée à la croissance (par défaut 0.05)
+    
+    Retourne :
+    - La matrice de corrélation
+    """
+
+    # Calculer la matrice de corrélation
+    correlation_matrix = data[['log_PIB_par_tete', 'log_s', 'log_n_g_sigma']].corr()
+    
+    # Visualiser la heatmap des corrélations
+    sns.heatmap(correlation_matrix, annot=True, cmap="coolwarm", fmt=".2f")
+    plt.title("Heatmap des corrélations")
+    plt.show()
+    
+    return correlation_matrix
+
+
+
+## II-13 Fonction pour afficher les résultats du K-Means
+def afficher_resultats_kmeans(pipeline, donnees, donnees_originales):
+    """
+    Affichage des résultats du K-Means et assignation des étiquettes de clusters aux données originales.
+
+    Args :
+        pipeline : Le pipeline contenant K-Means.
+        donnees : Les données prétraitées (uniquement les caractéristiques numériques).
+        donnees_originales : Le DataFrame original contenant la colonne 'Country'.
+    """
+    t0 = time()
+    pipeline.fit(donnees)
+    temps_execution = time() - t0
+
+    resultats = [pipeline['clusterer'].init, temps_execution, pipeline['clusterer'].n_iter_, pipeline['clusterer'].inertia_]
+
+    donnees_kmeans = pipeline['preprocessor'].transform(donnees)
+    etiquettes_predites_kmeans = pipeline['clusterer'].labels_
+
+    resultats += [silhouette_score(donnees_kmeans, etiquettes_predites_kmeans, metric='euclidean')]
+    print('init\t\ttemps\tnb_iter\tinertie\tsilhouette')
+    print("{:9s}\t{:.3f}s\t{}\t{:.0f}\t{:.3f}".format(*resultats))
+
+    # Assigne les étiquettes de clusters au DataFrame original
+    donnees_originales['Cluster'] = etiquettes_predites_kmeans
+    print("\nAssignations de clusters :\n", donnees_originales[['Country', 'Cluster']])
+
+
+
+
+## II-14 Fonction pour analyser les silhouettes
+
+def silouhette_analysis(pipeline, data, k_range):
+    """
+    Analyse de silhouette pour évaluer la qualité du clustering pour différents nombres de clusters.
+    
+    Args :
+        pipeline : Le pipeline contenant le modèle de clustering.
+        data : Les données à analyser.
+        k_range : Une plage de valeurs pour le nombre de clusters à tester (tuple ou liste avec deux valeurs).
+    
+    Returns :
+        scores_dict : Un dictionnaire contenant les scores de silhouette pour chaque nombre de clusters.
+    """
+
+    scores_dict = {}  # Initialise un dictionnaire pour stocker les scores de silhouette pour chaque nombre de clusters.
+    
+    # Boucle sur la plage de valeurs de clusters spécifiée.
+    for i in range(k_range[0], k_range[1]):
+        pipeline['clusterer'].n_clusters = i  # Modifie le nombre de clusters du modèle.
+        (fig, ax) = plt.subplots()  # Crée une nouvelle figure et des axes pour la visualisation.
+        
+        # Crée un visualiseur de silhouette en utilisant le modèle et les données transformées.
+        visu = silhouette_visualizer(
+            clone(pipeline['clusterer']),
+            pipeline['preprocessor'].fit_transform(data),
+            colors='yellowbrick',
+            ax=ax
+        )
+        
+        # Enregistre le score de silhouette moyen pour le nombre actuel de clusters dans le dictionnaire.
+        scores_dict[i] = visu.silhouette_score_  
+    
+    # Affiche les scores de silhouette pour chaque nombre de clusters testé.
+    for item in scores_dict:
+        print('{} clusters - Average silhouette score : {}'.format(item, scores_dict[item]))
+    
+    return scores_dict  # Retourne le dictionnaire des scores de silhouette.
+
+
+
+
+## II-15 Fonction pour la visualisation 2D des Clusters
+def tsne_visualization(data, predicted_labels, tsne_params):
+    """
+    Visualisation 2D des clusters en utilisant l'algorithme t-SNE.
+    
+    Args :
+        data : Les données à projeter en 2D.
+        predicted_labels : Les étiquettes des clusters prédites.
+        tsne_params : Les paramètres pour l'algorithme t-SNE (sous forme de dictionnaire).
+    """
+    
+    # Applique l'algorithme t-SNE sur les données avec les paramètres spécifiés.
+    tsne = manifold.TSNE(**tsne_params)
+    tsne_result = tsne.fit_transform(data)
+    
+    # Crée un DataFrame contenant les résultats de la projection t-SNE et les étiquettes des clusters.
+    df_tsne = pd.DataFrame(tsne_result, columns=['tsne_1', 'tsne_2'])
+    df_tsne['predicted_labels'] = predicted_labels
+    
+    # Initialise une figure pour la visualisation.
+    plt.figure(figsize=(15, 12))
+    
+    # Trace un scatterplot avec les clusters colorés en fonction des étiquettes prédites.
+    sns.scatterplot(
+        x='tsne_1', y='tsne_2',  # Colonnes t-SNE pour les axes.
+        hue='predicted_labels',  # Variable pour la couleur des points (clusters).
+        palette=sns.color_palette("hls", df_tsne['predicted_labels'].nunique()),  # Palette de couleurs adaptée au nombre de clusters.
+        data=df_tsne,  # Source des données.
+        legend="full",  # Affiche la légende complète.
+        alpha=0.4  # Définit la transparence des points pour une meilleure visibilité.
+    )
+
+## II-16 Fonction pour l'interprétation des clusters
+
+def clustering_interpretations(df, min_max=(0, 100)):
+    """
+    Interprétation des clusters en utilisant les moyennes des variables numériques et une échelle normalisée.
+    
+    Args :
+        df : Le DataFrame contenant les données avec les étiquettes de clusters.
+        min_max : La plage de normalisation pour les valeurs des moyennes (tuple).
+    
+    Returns :
+        Un DataFrame contenant les scores normalisés pour chaque cluster.
+    """
+    
+    # Calcule la moyenne des variables numériques pour chaque cluster.
+    grouped_df = df.select_dtypes(include=['number']).groupby('predicted_label').mean()
+    
+    # Applique une normalisation MinMax aux moyennes des clusters.
+    scaler = MinMaxScaler(min_max)
+    scaled_df = pd.DataFrame(scaler.fit_transform(grouped_df), columns=grouped_df.columns)
+    
+    scores = []  # Initialise une liste pour stocker les scores normalisés pour chaque cluster.
+    
+    # Boucle sur chaque cluster pour afficher ses scores et visualisations.
+    for cluster, row in scaled_df.iterrows():
+        print(row)  # Affiche les scores pour le cluster actuel.
+        scores.append(row)  # Ajoute les scores à la liste.
+        
+        # Crée une visualisation en radar pour les variables du cluster actuel.
+        fig = px.line_polar(
+            row, 
+            r=row.values,  # Valeurs des variables (rayon).
+            theta=row.index,  # Noms des variables (angle).
+            line_close=True,  # Ferme le polygone formé par les points.
+            title='Cluster {}'.format(cluster)  # Titre de la figure avec le numéro du cluster.
+        )
+        fig.update_traces(fill='toself')  # Remplit l'intérieur du polygone.
+        fig.show()  # Affiche la figure.
+    
+    # Retourne un DataFrame avec les scores normalisés pour tous les clusters.
+    return pd.DataFrame(scores)
