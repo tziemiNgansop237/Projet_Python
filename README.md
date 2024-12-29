@@ -102,5 +102,9 @@ Le projet est composé de trois notebooks jupyter, soit trois grandes parties :
 
    ```bash
    git clone https://github.com/tziemiNgansop237/Projet_Python.git
-
+2. installez les packages comme suit depuis votre terminal:
+    ```bash
+     cd chemin/vers/projet_Python
+   pip install -r requirements.txt
+4. naviguez dans les notebook
 &hearts;
