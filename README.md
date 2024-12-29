@@ -95,6 +95,7 @@ Le projet est composé de trois notebooks jupyter, soit trois grandes parties :
 1. De prime a bord, le fichier ` Preparation_donnees.ipynb`, montre comment nous avons procedé pour pouvoir recuper les données et les traiter;
 2. ensuite dans le fichier `analyse_des_donnees.ipynb` nous faisons l'analyse descriptive et temporelle de nos données;
 3. enfin dans le fichier `modélisation.ipynb` nous essayons de trouver des liens entre les données grace a differents modeles afin de monter les points forts du modele de Solow Swan, puis de donner ses limites avant de chuter sur une conlusion générale.
+4. Le notebook `main.ipynb` permet d'exécuter l'ensemble de ces notebooks.
 ## Comment exécuter le projet ?
 
 1. Clonez ce dépôt sur votre machine locale.
