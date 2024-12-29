@@ -307,9 +307,12 @@ def analyse_serie_temporelle(data, indicateur, pays):
 
 ## II-8- Calcul du taux de croissance moyen par pays
 
-def calculer_taux_croissance_moyen_par_pays(df, year_col, country_col, population_col):
+import pandas as pd
+import numpy as np
+
+def calculer_taux_croissance_moyen(df, year_col, country_col, population_col):
     """
-    Calcule le taux de croissance démographique moyen (n) pour chaque pays entre 1990 et 2023.
+    Calcule le taux moyen de croissance de la population pour chaque pays entre 1990 et 2023.
     Args:
         df (pd.DataFrame): Le DataFrame contenant les données.
         year_col (str): Nom de la colonne représentant les années.
@@ -321,20 +324,16 @@ def calculer_taux_croissance_moyen_par_pays(df, year_col, country_col, populatio
     # Trier les données par pays et année
     df = df.sort_values(by=[country_col, year_col]).copy()
     
-    # Calculer la population décalée (année précédente) pour chaque pays
-    df['Population_lag'] = df.groupby(country_col)[population_col].shift(1)
+    # Filtrer les données pour ne conserver que les années 1990 à 2023
+    df = df[(df[year_col] == 1990) | (df[year_col] == 2023)]
     
-    # Calculer le taux de croissance démographique pour chaque année
-    df['Taux_croissance_annuel'] = (df[population_col] - df['Population_lag']) / df['Population_lag']
-    
-    # Supprimer les lignes où le taux ne peut pas être calculé (première année pour chaque pays)
-    df = df.dropna(subset=['Taux_croissance_annuel']).copy()
-    
-    # Calculer le taux de croissance moyen par pays
-    taux_croissance_moyen = df.groupby(country_col)['Taux_croissance_annuel'].mean().reset_index()
-    taux_croissance_moyen.rename(columns={'Taux_croissance_annuel': 'Taux_croissance_moyen'}, inplace=True)
+    # Calculer le taux moyen de croissance par pays
+    taux_croissance_moyen = df.groupby(country_col).apply(
+        lambda group: (group[population_col].iloc[-1] / group[population_col].iloc[0]) ** (1 / (2023 - 1990)) - 1
+    ).reset_index(name='Taux_croissance_moyen')
     
     return taux_croissance_moyen
+
 
 
 ## II-9- Calcul du taux d'épargne moyen par pays 
