@@ -3,10 +3,12 @@
 ## I-1 Modules pour l'importation des données api
 import requests
 import openpyxl
+import zipfile
 
 
 ## I-2 Modules pour l'analyse de données et manipulations
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os
@@ -16,7 +18,7 @@ import numpy as np
 ## I-3 Modules pour la visualisation des données
 import geopandas as gpd
 import dash
-from dash import dcc, html, dash_table
+from dash import Dash, dcc, html, dash_table
 from dash.dependencies import Input, Output
 import plotly.express as px
 
@@ -330,7 +332,7 @@ def analyse_serie_temporelle(data, indicateur, pays):
 ## II-8- Calcul du taux de croissance moyen par pays
 
 import pandas as pd
-import numpy as np
+
 
 def calculer_taux_croissance_moyen(df, year_col, country_col, population_col):
     """
@@ -348,7 +350,7 @@ def calculer_taux_croissance_moyen(df, year_col, country_col, population_col):
     
     # Calculer le taux moyen de croissance par pays
     taux_croissance_moyen = df.groupby(country_col).apply(
-        lambda group: (group[population_col].iloc[-1] / group[population_col].iloc[0]) ** (1 / (2023 - 1990)) - 1
+        lambda group: (group[population_col].iloc[-1] / group[population_col].iloc[0]) ** (1 / (group[year_col].iloc[-1] - group[year_col].iloc[0])) - 1
     ).reset_index(name='Taux_croissance_moyen')
     
     return taux_croissance_moyen
@@ -369,6 +371,7 @@ def calculer_taux_epargne_moyen(df, year_col, country_col, capital_travailleur, 
         pd.DataFrame: Un nouveau DataFrame avec le pays et son taux d'épargne moyen (s).
     """
     # Calculer le taux d'épargne pour chaque ligne
+    df = df.copy()
     df['Taux_epargne'] = df[capital_travailleur] / df[pib_travailleur]
     
     # Calculer la moyenne du taux d'épargne par pays
